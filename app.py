@@ -1,22 +1,19 @@
-
 import streamlit as st
 import pandas as pd
-import requests 
-from bs4 
-import BeautifulSoup
+import numpy as np
+import requests
+from bs4 import BeautifulSoup
 
-# —————————————————————————————————————————————————————————————
-# GENERIC TABLE SCRAPER
-# —————————————————————————————————————————————————————————————
-def generic_table_scraper(url):
+# Generic table scraper
+def generic_table_scraper(url, timeout=10):
     try:
-        resp = requests.get(url)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        r = requests.get(url, timeout=timeout)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
         table = soup.find("table")
-        if not table:
+        if table is None:
             return pd.DataFrame()
-        headers = [cell.text.strip() for cell in table.find("tr").find_all(["th","td"])]
+        headers = [th.text.strip() for th in table.find("tr").find_all(["th","td"])]
         rows = table.find_all("tr")[1:]
         data = []
         for row in rows:
@@ -28,43 +25,24 @@ def generic_table_scraper(url):
     except:
         return pd.DataFrame()
 
-# —————————————————————————————————————————————————————————————
-# FETCHER
-# —————————————————————————————————————————————————————————————
-def fetch_data(section, date_str, track, race_no):
-    if section:
-        url = f"https://liderform.com.tr/program/{section}/{date_str}/{track}/{race_no}"
-    else:
-        url = f"https://liderform.com.tr/program/{date_str}/{track}/{race_no}"
+# Fetch daily program from TJK
+def fetch_daily_program(date_str):
+    url = ("https://www.tjk.org/TR/yarissever/Info/Page/GunlukYarisProgrami"
+           f"?QueryParameter_Tarih={date_str}")
     return generic_table_scraper(url)
 
-# —————————————————————————————————————————————————————————————
-# APP
-# —————————————————————————————————————————————————————————————
-st.set_page_config(page_title="Kâhin 15 – Analiz", layout="wide")
-st.title("🏇 Kâhin 15 – İstanbul 07.06.2025")
+# Streamlit UI
+st.set_page_config(page_title="Kâhin 15 Program", layout="wide")
+st.title("🏇 Kâhin 15 – Günlük Program")
 
-# inputs
-date_str = "2025-07-06"
-race_no   = st.selectbox("Koşu Numarası", list(range(1,13)))
-track     = st.selectbox("Pist Seçimi", [
-    "ISTANBUL","ANKARA","IZMIR","ADANA","BURSA",
-    "KOCAELI","ELAZIG","URFA","SAMSUN","SARATOGA","INDIANAPOLIS"
-])
+date = st.date_input("Tarih")
+if st.button("Programı Getir"):
+    # TJK formatı: DD/MM/YYYY
+    d, m, y = date.day, date.month, date.year
+    qdate = f"{d:02d}/{m:02d}/{y}"
+    df = fetch_daily_program(qdate)
 
-# tabs & config
-tabs     = st.tabs(["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"])
-sections = ["","performans","galop","sprintler","orijin","kim-kimi-gecti","jokey"]
-labels   = ["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"]
-keys     = ["p","f","g","s","o","k","j"]
-
-# loop through each tab
-for tab, sec, lbl, key in zip(tabs, sections, labels, keys):
-    with tab:
-        if st.button(f"{lbl} Verilerini Göster", key=key):
-            df = fetch_data(sec, date_str, track, race_no)
-            if df.empty:
-                st.warning(f"{lbl} verisi bulunamadı.")
-            else:
-                st.success(f"{lbl} verisi yüklendi.")
-                st.dataframe(df, use_container_width=True)
+    if df.empty:
+        st.error("Program verisi alınamadı.")
+    else:
+        st.dataframe(df, use_container_width=True)
