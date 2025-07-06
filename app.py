@@ -1,19 +1,41 @@
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
-def fetch_race_data(race_number):
+# İstanbul için örnek veri
+def fetch_istanbul_data(race_number):
     return pd.DataFrame([
         {"At": "SPECIAL MAN", "No": 6, "Puan": 91, "Odds%": 36.4},
         {"At": "AMAZING TOUCH", "No": 2, "Puan": 88, "Odds%": 29.7},
         {"At": "DAPPER MAN", "No": 4, "Puan": 84, "Odds%": 21.1},
     ])
 
-st.set_page_config(page_title="Kâhin 15 Mobil Analiz", layout="mobile")
+# Saratoga için Equibase scraping
+def fetch_saratoga_data():
+    url = "https://www.equibase.com/static/entry/SAR20240801USA-EQB.html"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "html.parser")
+    atlar = [tag.text.strip() for tag in soup.select("td a[href*='HorseID']")]
+    return pd.DataFrame({"At": atlar})
+
+# Streamlit arayüz
+st.set_page_config(page_title="Kâhin 15 Mobil Analiz", layout="wide")
 st.title("🧠 Kâhin 15 Mobil Analiz")
 
-race = st.selectbox("Yarış Numarası", list(range(1,10)), index=0)
-if st.button("Analiz Et"):
-    df = fetch_race_data(race)
-    st.markdown(f"## İstanbul {race}. Koşu – İlk 3 At")
-    st.table(df[["At","No","Puan","Odds%"]])
-    st.caption("Veriler ‘Kâhin 15’ kriterlerine göre analiz edilmiştir.")
+pist = st.selectbox("Pist Seç", ["İstanbul", "Saratoga"])
+
+if pist == "İstanbul":
+    race = st.selectbox("Yarış Numarası", list(range(1, 10)), index=0)
+    if st.button("Analiz Et"):
+        df = fetch_istanbul_data(race)
+        st.markdown(f"## İstanbul {race}. Koşu – İlk 3 At")
+        st.table(df[["At", "No", "Puan", "Odds%"]])
+        st.caption("Veriler ‘Kâhin 15’ kriterlerine göre analiz edilmiştir.")
+
+elif pist == "Saratoga":
+    if st.button("Saratoga Verilerini Getir"):
+        df = fetch_saratoga_data()
+        st.markdown("## Saratoga – Koşu Listesi")
+        st.table(df)
+        st.caption("Veriler Equibase üzerinden çekilmiştir.")
