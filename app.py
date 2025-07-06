@@ -1,43 +1,9 @@
+import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-def fetch_istanbul_data(race_number):
-    try:
-        url = f"https://liderform.com.tr/program/2025-07-06/ISTANBUL/{race_number}"
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        rows = soup.find_all("tr")
-        data = []
-
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) >= 10:
-                try:
-                    at_adi = cols[1].text.strip()
-                    jokey = cols[5].text.strip()
-                    agf_raw = cols[17].text.strip()
-                    agf = agf_raw.split("%")[-1].split("(")[0].strip()
-                    sprint = cols[15].text.strip()
-                    data.append({
-                        "At": at_adi,
-                        "Jokey": jokey,
-                        "AGF%": f"%{agf}",
-                        "Sprint": sprint
-                    })
-                except:
-                    continue
-
-        return pd.DataFrame(data)
-
-    except Exception as e:
-        return pd.DataFrame([{"Hata": f"Veri çekilemedi: {e}"}])
-
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-
+# Galop verisini çeken fonksiyon
 def fetch_galop_data(race_number):
     try:
         url = f"https://liderform.com.tr/program/galop/2025-07-06/ISTANBUL/{race_number}"
@@ -82,3 +48,17 @@ def fetch_galop_data(race_number):
 
     except Exception as e:
         return pd.DataFrame([{"Hata": f"Galop verisi çekilemedi: {e}"}])
+
+# Streamlit arayüzü
+st.set_page_config(page_title="Kâhin 15 - Galop Analizi", layout="wide")
+st.title("📊 Kâhin 15 - İstanbul Galop Analizi")
+
+race_number = st.selectbox("🏇 Koşu Numarası Seç", list(range(1, 10)))
+
+if st.button("Galop Verilerini Göster"):
+    df = fetch_galop_data(race_number)
+    if df.empty:
+        st.warning("Veri bulunamadı veya sayfa yapısı değişmiş olabilir.")
+    else:
+        st.success(f"{race_number}. koşu için galop verileri yüklendi.")
+        st.dataframe(df, use_container_width=True)
