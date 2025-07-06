@@ -7,4 +7,5 @@ pip
 install -r 
 requirements.txt
 streamlit 
-run app.py
+run 
+app.py
