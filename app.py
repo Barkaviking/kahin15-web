@@ -1,56 +1,60 @@
 import streamlit as st
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
 import datetime
 
 # —————————————————————————————————————————————————————————————
-# GENERIC TABLE SCRAPER
+# SMART TABLE SCRAPER
 # —————————————————————————————————————————————————————————————
-def generic_table_scraper(url):
+def smart_table_scraper(url):
+    """
+    1) URL’den tüm tabloları çek (pd.read_html)
+    2) Başlığı 'At' veya 'Jokey Adı' içeren tabloyu döndür
+    3) Bulamazsa ilk tabloyu döndür
+    """
     try:
-        r = requests.get(url)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.find("table")
-        if not table:
+        # pandas ile tabloları al
+        tables = pd.read_html(url)
+        if not tables:
             return pd.DataFrame()
-        headers = [th.text.strip() for th in table.find("tr").find_all(["th", "td"])]
-        rows = table.find_all("tr")[1:]
-        data = []
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) != len(headers):
-                continue
-            data.append({headers[i]: cols[i].text.strip() for i in range(len(headers))})
-        return pd.DataFrame(data)
-    except:
+        
+        # Öncelikle 'At' barındıran tabloyu ara
+        for df in tables:
+            cols = [c.lower() for c in df.columns.astype(str)]
+            if any("at" in c for c in cols) or any("jokey" in c for c in cols):
+                return df
+
+        # Yoksa ilk tabloyu al
+        return tables[0]
+
+    except Exception:
         return pd.DataFrame()
 
 # —————————————————————————————————————————————————————————————
-# SECTION FETCHER
+# VERİ ÇEKME FONKSİYONU
 # —————————————————————————————————————————————————————————————
 def fetch_section(section, date_str, track, race_no):
+    """
+    section = ""              → /program/<date>/<track>/<race_no>
+    section = "performans"    → /program/performans/<date>/<track>/<race_no>
+    vs.
+    """
     if section:
         url = f"https://liderform.com.tr/program/{section}/{date_str}/{track}/{race_no}"
     else:
         url = f"https://liderform.com.tr/program/{date_str}/{track}/{race_no}"
-    return generic_table_scraper(url)
+    return smart_table_scraper(url)
 
 # —————————————————————————————————————————————————————————————
-# STREAMLIT APP CONFIG
+# STREAMLIT APP
 # —————————————————————————————————————————————————————————————
 st.set_page_config(page_title="Kâhin 15 – Yarış Analiz", layout="wide")
 st.title("🏇 Kâhin 15 – Yarış Verileri")
 
-# — Tarih Seçimi — bugün varsayılan, dilersen manuel değiştir
-selected_date = st.date_input(
-    "Tarih Seç",
-    datetime.date.today()
-)
-date_str = selected_date.strftime("%Y-%m-%d")
+# Tarih seçimi: bugün varsayılan, dilediğini seçebilirsin
+selected_date = st.date_input("Tarih Seç", datetime.date.today())
+date_str       = selected_date.strftime("%Y-%m-%d")
 
-# — Kullanıcı Girdileri
 race_no = st.selectbox("Koşu Numarası", list(range(1, 13)))
 track   = st.selectbox("Hipodrom/Şehir", [
     "ISTANBUL","ANKARA","IZMIR","ADANA","BURSA",
@@ -58,13 +62,12 @@ track   = st.selectbox("Hipodrom/Şehir", [
     "GULFSTREAM PARK","SARATOGA","INDIANAPOLIS"
 ])
 
-# — Sekmeler & Bölüm Anahtarları
+# Sekme tanımları
 tabs     = st.tabs(["Program","Performans","Galop","Sprint","Orijin","Birincilikler","Jokey"])
 sections = ["","performans","galop","sprintler","orijin","birincilikler","jokey"]
 labels   = ["Program","Performans","Galop","Sprint","Orijin","Birincilikler","Jokey"]
-keys     = ["prog","perf","galo","s","o","b","j"]
+keys     = ["p","f","g","s","o","b","j"]
 
-# — Her Sekme İçin Buton & Veri Çekme
 for tab, sec, lbl, key in zip(tabs, sections, labels, keys):
     with tab:
         if st.button(f"{lbl} Verilerini Göster", key=key):
