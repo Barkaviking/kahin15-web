@@ -1,35 +1,68 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import date
+from bs4 import BeautifulSoup
 
-st.set_page_config(page_title="Kâhin 15 – At İsimleri", layout="wide")
-st.title("🏇 Kâhin 15 – Program Sekmesi")
+# —————————————————————————————————————————————————————————————
+# GENERIC TABLE SCRAPER
+# —————————————————————————————————————————————————————————————
+def generic_table_scraper(url):
+    try:
+        resp = requests.get(url)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return pd.DataFrame()
+        headers = [cell.text.strip() for cell in table.find("tr").find_all(["th","td"])]
+        rows = table.find_all("tr")[1:]
+        data = []
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) != len(headers):
+                continue
+            data.append({headers[i]: cols[i].text.strip() for i in range(len(headers))})
+        return pd.DataFrame(data)
+    except:
+        return pd.DataFrame()
 
-# Bugünün tarihi
-date_str = date.today().strftime("%Y-%m-%d")
-track    = "ISTANBUL"
-race_no   = st.selectbox("Koşu Numarası", list(range(1, 13)))
+# —————————————————————————————————————————————————————————————
+# FETCHER
+# —————————————————————————————————————————————————————————————
+def fetch_data(section, date_str, track, race_no):
+    if section:
+        url = f"https://liderform.com.tr/{date_str}/{track}/{race_no}"
+    else:
+        url = f"https://liderform.com.tr/program/{date_str}/{track}/{race_no}"
+    return generic_table_scraper(url)
 
-# Oluşan URL
-url = f"https://liderform.com.tr/program/{date_str}/{track}/{race_no}"
-st.markdown(f"**URL:** `{url}`")
+# —————————————————————————————————————————————————————————————
+# APP
+# —————————————————————————————————————————————————————————————
+st.set_page_config(page_title="Kâhin 15 – Analiz", layout="wide")
+st.title("🏇 Kâhin 15 – İstanbul 07.06.2025")
 
-# İsteği yap ve pandas ile tabloyu al
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-}
-try:
-    resp = requests.get(url, headers=headers, timeout=10)
-    resp.raise_for_status()
-    tables = pd.read_html(resp.text)
-    df = tables[0] if tables else pd.DataFrame()
-except Exception:
-    df = pd.DataFrame()
+# inputs
+date_str = "2025-07-06"
+race_no   = st.selectbox("Koşu Numarası", list(range(1,13)))
+track     = st.selectbox("Pist Seçimi", [
+    "ISTANBUL","ANKARA","IZMIR","ADANA","BURSA",
+    "KOCAELI","ELAZIG","URFA","SAMSUN","SARATOGA","INDIANAPOLIS"
+])
 
-# At isimlerini çıkar ve göster
-if df.empty:
-    st.error("Veri bulunamadı. URL, tarih veya site yapısı değişmiş olabilir.")
-else:
-    cols = [c for c in df.columns if "at" in c.lower() or "horse" in c.lower()]
-    st.dataframe(df[cols] if cols else df, use_container_width=True)
+# tabs & config
+tabs     = st.tabs(["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"])
+sections = ["","performans","galop","sprintler","orijin","kim-kimi-gecti","jokey"]
+labels   = ["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"]
+keys     = ["p","f","g","s","o","k","j"]
+
+# loop through each tab
+for tab, sec, lbl, key in zip(tabs, sections, labels, keys):
+    with tab:
+        if st.button(f"{lbl} Verilerini Göster", key=key):
+            df = fetch_data(sec, date_str, track, race_no)
+            if df.empty:
+                st.warning(f"{lbl} verisi bulunamadı.")
+            else:
+                st.success(f"{lbl} verisi yüklendi.")
+                st.dataframe(df, use_container_width=True)
