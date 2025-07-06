@@ -13,17 +13,33 @@ def fetch_istanbul_data(race_number):
 
 # Saratoga için Equibase scraping
 def fetch_saratoga_data():
-    url = "https://www.equibase.com/static/entry/SAR20240801USA-EQB.html"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    atlar = [tag.text.strip() for tag in soup.select("td a[href*='HorseID']")]
-    return pd.DataFrame({"At": atlar})
+    try:
+        url = "https://www.equibase.com/static/entry/SAR20240801USA-EQB.html"
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        atlar = [tag.text.strip() for tag in soup.select("td a[href*='HorseID']")]
+        return pd.DataFrame({"At": atlar})
+    except Exception as e:
+        st.error(f"Saratoga verisi çekilemedi: {e}")
+        return pd.DataFrame()
+
+# Indianapolis için Equibase scraping
+def fetch_indianapolis_data():
+    try:
+        url = "https://www.equibase.com/static/entry/IND20240801USA-EQB.html"
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        atlar = [tag.text.strip() for tag in soup.select("td a[href*='HorseID']")]
+        return pd.DataFrame({"At": atlar})
+    except Exception as e:
+        st.error(f"Indianapolis verisi çekilemedi: {e}")
+        return pd.DataFrame()
 
 # Streamlit arayüz
 st.set_page_config(page_title="Kâhin 15 Mobil Analiz", layout="wide")
 st.title("🧠 Kâhin 15 Mobil Analiz")
 
-pist = st.selectbox("Pist Seç", ["İstanbul", "Saratoga"])
+pist = st.selectbox("Pist Seç", ["İstanbul", "Saratoga", "Indianapolis"])
 
 if pist == "İstanbul":
     race = st.selectbox("Yarış Numarası", list(range(1, 10)), index=0)
@@ -36,6 +52,15 @@ if pist == "İstanbul":
 elif pist == "Saratoga":
     if st.button("Saratoga Verilerini Getir"):
         df = fetch_saratoga_data()
-        st.markdown("## Saratoga – Koşu Listesi")
-        st.table(df)
-        st.caption("Veriler Equibase üzerinden çekilmiştir.")
+        if not df.empty:
+            st.markdown("## Saratoga – Koşu Listesi")
+            st.table(df)
+            st.caption("Veriler Equibase üzerinden çekilmiştir.")
+
+elif pist == "Indianapolis":
+    if st.button("Indianapolis Verilerini Getir"):
+        df = fetch_indianapolis_data()
+        if not df.empty:
+            st.markdown("## Indianapolis – Koşu Listesi")
+            st.table(df)
+            st.caption("Veriler Equibase üzerinden çekilmiştir.")
