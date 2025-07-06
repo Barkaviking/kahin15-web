@@ -14,64 +14,55 @@ def generic_table_scraper(url):
         table = soup.find("table")
         if not table:
             return pd.DataFrame()
-        # header
         headers = [cell.text.strip() for cell in table.find("tr").find_all(["th","td"])]
+        rows = table.find_all("tr")[1:]
         data = []
-        for row in table.find_all("tr")[1:]:
+        for row in rows:
             cols = row.find_all("td")
             if len(cols) != len(headers):
                 continue
-            record = {headers[i]: cols[i].text.strip() for i in range(len(headers))}
-            data.append(record)
+            data.append({headers[i]: cols[i].text.strip() for i in range(len(headers))})
         return pd.DataFrame(data)
     except:
         return pd.DataFrame()
 
 # —————————————————————————————————————————————————————————————
-# SECTION FETCHERS
+# FETCHER
 # —————————————————————————————————————————————————————————————
-def fetch_data(section, date_str, pist, race_number):
+def fetch_data(section, date_str, track, race_no):
     if section:
-        url = f"https://liderform.com.tr/program/{section}/{date_str}/{pist}/{race_number}"
+        url = f"https://liderform.com.tr/program/{section}/{date_str}/{track}/{race_no}"
     else:
-        url = f"https://liderform.com.tr/program/{date_str}/{pist}/{race_number}"
+        url = f"https://liderform.com.tr/program/{date_str}/{track}/{race_no}"
     return generic_table_scraper(url)
 
 # —————————————————————————————————————————————————————————————
-# STREAMLIT APP
+# APP
 # —————————————————————————————————————————————————————————————
-st.set_page_config(page_title="Kâhin 15 – İstanbul Analiz", layout="wide")
-st.title("🏇 Kâhin 15 – İstanbul 07.06.2025 Analiz")
+st.set_page_config(page_title="Kâhin 15 – Analiz", layout="wide")
+st.title("🏇 Kâhin 15 – İstanbul 07.06.2025")
 
+# inputs
 date_str = "2025-07-06"
-race_number = st.selectbox("Koşu Numarası Seç", list(range(1, 13)))
-pist = st.selectbox("Pist Seç", [
-    "ISTANBUL","ANKARA","IZMIR","ADANA",
-    "BURSA","KOCAELI","ELAZIG","URFA",
-    "SAMSUN","SARATOGA","INDIANAPOLIS"
+race_no   = st.selectbox("Koşu Numarası", list(range(1,13)))
+track     = st.selectbox("Pist Seçimi", [
+    "ISTANBUL","ANKARA","IZMIR","ADANA","BURSA",
+    "KOCAELI","ELAZIG","URFA","SAMSUN","SARATOGA","INDIANAPOLIS"
 ])
 
-tabs = st.tabs([
-    "Program", "Performans", "Galop",
-    "Sprint", "Orijin", "Kim Kimi Geçti", "Jokey"
-])
-sections = [
-    "",            # Program
-    "performans",  # Performans
-    "galop",       # Galop
-    "sprintler",   # Sprint
-    "orijin",      # Orijin
-    "kim-kimi-gecti",  # Kim Kimi Geçti
-    "jokey"        # Jokey
-]
-keys = ["prog","perf","galo","spri","ori","kim","jok"]
+# tabs & config
+tabs     = st.tabs(["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"])
+sections = ["","performans","galop","sprintler","orijin","kim-kimi-gecti","jokey"]
+labels   = ["Program","Performans","Galop","Sprint","Orijin","Kim Kimi Geçti","Jokey"]
+keys     = ["p","f","g","s","o","k","j"]
 
-for tab, section_key, key in zip(tabs, sections, keys):
+# loop through each tab
+for tab, sec, lbl, key in zip(tabs, sections, labels, keys):
     with tab:
-        if st.button(f"{tab} Verilerini Göster", key=key):
-            df = fetch_data(section_key, date_str, pist, race_number)
+        if st.button(f"{lbl} Verilerini Göster", key=key):
+            df = fetch_data(sec, date_str, track, race_no)
             if df.empty:
-                st.warning(f"{tab} verisi bulunamadı.")
+                st.warning(f"{lbl} verisi bulunamadı.")
             else:
-                st.success(f"{tab} verisi yüklendi.")
+                st.success(f"{lbl} verisi yüklendi.")
                 st.dataframe(df, use_container_width=True)
