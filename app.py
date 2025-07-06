@@ -4,7 +4,6 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import date
 
-# TJK sayfasından günlük programı çeken fonksiyon
 def fetch_daily_program(date_str):
     url = f"https://www.tjk.org/TR/yarissever/Info/Page/GunlukYarisProgrami?QueryParameter_Tarih={date_str}"
     headers = {
@@ -30,7 +29,7 @@ def fetch_daily_program(date_str):
         st.error(f"Veri çekme hatası: {e}")
         return pd.DataFrame()
 
-# Streamlit arayüzü
+# Streamlit UI
 st.set_page_config(page_title="Kâhin 15 Program", layout="wide")
 st.title("🏇 Kâhin 15 – Günlük Program")
 
@@ -38,13 +37,16 @@ today = date.today()
 selected_date = st.date_input("Tarih", value=today)
 
 if st.button("Programı Getir"):
-    # TJK formatı: GG/AA/YYYY
-    d, m, y = selected_date.day, selected_date.month, selected_date.year
-    tjk_date = f"{d:02d}/{m:02d}/{y}"
+    # GG/AA/YYYY formatına çevir
+    gun = f"{selected_date.day:02d}"
+    ay = f"{selected_date.month:02d}"
+    yil = f"{selected_date.year}"
+    tjk_date = f"{gun}/{ay}/{yil}"
+
     df = fetch_daily_program(tjk_date)
 
     if df.empty:
-        st.warning("Program verisi alınamadı. Tarih doğru mu, TJK sayfası açık mı kontrol et.")
+        st.warning(f"{tjk_date} tarihli program bulunamadı veya tablo çekilemedi.")
     else:
         st.success(f"{tjk_date} tarihli program yüklendi.")
         st.dataframe(df, use_container_width=True)
