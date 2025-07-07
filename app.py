@@ -128,3 +128,63 @@ def fetch_liderform_galop():
     tbl = soup.find("table")
     if not tbl:
         return pd.DataFrame()
+    cols = [th.get_text(strip=True).lower().replace(" ","_") for th in tbl.find_all("th")]
+    rows = []
+    for tr in tbl.find_all("tr")[1:]:
+        vals = [td.get_text(strip=True) for td in tr.find_all("td")]
+        if len(vals)==len(cols):
+            rows.append(vals)
+    df = pd.DataFrame(rows, columns=cols)
+    if "no" in df.columns:
+        df["kosu_no"] = df["no"]
+    return df.rename(columns={"adi":"horse"})
+
+
+# 6) BÜLTEN DERLEME & MERGE
+def compile_bulten():
+    a = fetch_altiliganyan_bulteni()
+    s = fetch_sporx_bulten()
+    b = fetch_bitalih_bulten()
+    h = fetch_hipodrom_bulten()
+    l = fetch_liderform_galop()
+
+    # start from altılı-ganyan bülteni
+    df = a.copy()
+
+    # merge in order of priority
+    for src in (s,b,h,l):
+        df = pd.merge(
+            df,
+            src,
+            on=["hipodrom","kosu_no","horse"],
+            how="left",
+            suffixes=("","_x")
+        )
+
+    # fill col list
+    cols = [
+        "hipodrom","kosu_no","horse",
+        "orijin","sahip","jokey","antrenor",
+        "idman","sinif_seviyesi","son_3_yaris",
+        "agf_raw","agf_sporx","gp","hp","saat"
+    ]
+    return df[[c for c in cols if c in df.columns]]
+
+
+# ───── Streamlit UI ─────
+st.set_page_config(page_title="Kâhin15 – Çoklu Bülten", layout="wide")
+st.title("🏇 Günlük At Yarışı Bülteni (5 Kaynak)")
+
+if st.button("Bülteni Derle"):
+    df = compile_bulten()
+    if df.empty:
+        st.error("Hiç kaynaktan veri çekilemedi.")
+    else:
+        st.dataframe(df, use_container_width=True)
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 CSV İndir",
+            data=csv,
+            file_name=f"bulten_{date.today()}.csv",
+            mime="text/csv"
+        )
