@@ -115,4 +115,4 @@ if st.button("Bülteni Derle"):
     else:
         st.dataframe(gb, use_container_width=True)
 
-    st.subheader("► Sonduzluk – Gün
+    st.subheader("► Sonduzluk – Günün Koşu Programı")
