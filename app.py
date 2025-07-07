@@ -52,14 +52,3 @@ if st.button("Programı Getir"):
         st.success(f"{tarih.strftime('%d/%m/%Y')} tarihli program yüklendi.")
         st.dataframe(df, use_container_width=True)
 
-# render.yaml
-
-services:
-  - type: web
-    name: kahin15-web
-    env: python
-    # Tek satır değil, her paket ayrı satır:
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT
-    # Port’u $PORT’a bağlayarak Render uyumluluğu sağlanır
-    autoDeploy: true
