@@ -30,13 +30,31 @@ def fetch_yenibeygir_results():
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     tbl = soup.find("table")
-    headers = [th.get_text(strip=True) for th in tbl.find_all("th")]
+
+    # 1) Orijinal başlıkları al
+    orig_headers = [th.get_text(strip=True) for th in tbl.find_all("th")]
+
+    # 2) Aynı veya boş başlıkları yeniden adlandır
+    seen = {}
+    clean_headers = []
+    for h in orig_headers:
+        key = h or "Unnamed"
+        seen[key] = seen.get(key, 0) + 1
+        clean_headers.append(f"{key}" + (f"_{seen[key]}" if seen[key] > 1 else ""))
+
+    # 3) Satır verilerini al
     rows = []
     for tr in tbl.find_all("tr")[1:]:
         cells = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cells) == len(headers):
+        if len(cells) == len(clean_headers):
             rows.append(cells)
-    return pd.DataFrame(rows, columns=headers)
+
+    df = pd.DataFrame(rows, columns=clean_headers)
+
+    # 4) Fazla sütun varsa kaldır (opsiyonel)
+    df = df.loc[:, ~df.columns.duplicated()]
+
+    return df
 
 # 3) İki kaynaktan gelenleri at ismi üzerinden birleştir
 def merge_results(lf, yb):
