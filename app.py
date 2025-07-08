@@ -1,26 +1,42 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import date
 
-url = "https://www.sihirlikantarma.org/2025/07/08-temmuz-nalkapon-ankara-at-yarisi.html"
-headers = {"User-Agent": "Mozilla/5.0"}
+def fetch_daily_program(race_date: date):
+    """
+    Verilen tarihe ait yarış programını hipodromx.com’dan çeker.
+    """
+    date_str = race_date.strftime("%d.%m.%Y")
+    url = f"https://hipodromx.com/program.aspx?Tarih={date_str}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
 
-yerli_sehirler = ["İstanbul", "İzmir", "Ankara", "Bursa", "Adana", "Elazığ", "Kocaeli"]
-bugun = datetime.now().strftime("%d %B")
+    soup = BeautifulSoup(resp.text, "html.parser")
 
-resp = requests.get(url, headers=headers)
-soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table")
+    if not table:
+        return []
 
-print("📌 Bugünkü Yerli Yarış Bültenleri:\n")
-for h3 in soup.find_all("h3", class_="post-title"):
-    a_tag = h3.find("a")
-    if not a_tag:
-        continue
-    title = a_tag.get_text(strip=True)
-    link = a_tag["href"]
-    
-    if bugun in title:
-        for sehir in yerli_sehirler:
-            if sehir in title:
-                print(f"✅ {sehir} → {title}")
-                print(f"🔗 Link: {link}\n")
+    rows = table.find_all("tr")[1:]
+    program = []
+    for tr in rows:
+        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+        if len(cols) < 7:
+            continue
+        program.append({
+            "Saat":        cols[0],
+            "Koşu No":     cols[1],
+            "At Türü":     cols[2],
+            "Şart":        cols[3],
+            "Mesafe":      cols[4],
+            "İkramiye":    cols[5],
+            "Pist":        cols[6],
+        })
+    return program
+
+if __name__ == "__main__":
+    from datetime import date
+    data = fetch_daily_program(date.today())
+    for item in data:
+        print(item)
