@@ -1,140 +1,105 @@
-import streamlit as st
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import re
-from datetime import date
+import pandas as pd
+from datetime import datetime
 
-st.set_page_config(page_title="Kâhin15 – Bülten", layout="wide")
-st.title("🏇 Günlük At Yarışı Bülteni")
+# 1. Sayfa İndirme
+def fetch_page(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    return BeautifulSoup(resp.text, "html.parser")
 
-# — Helper: “güvenli fetch” decorator
-def safe_fetch(fn):
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception:
-            return pd.DataFrame()
-    return wrapper
+# 2. Yarış Programı (Bugünün koşuları)
+def parse_program(soup):
+    data = []
+    # Örnek: "At Yarışı Programı" başlıklı bölümü seç
+    section = soup.find("h3", string=lambda t: "Program" in t)
+    if section:
+        table = section.find_next("table")
+        for row in table.find_all("tr")[1:]:
+            cols = [td.get_text(strip=True) for td in row.find_all("td")]
+            data.append(cols)
+    return pd.DataFrame(data, columns=["Koşu No", "Saat", "Pist", "Koşu Şartları"])
 
-# 1) AltılıGanyan – Ana Bülten
-@safe_fetch
-def fetch_ag_bulten():
-    url = ("https://www.altiliganyan.com/"
-           "tjk/at-yarisi-bulteni?bt=18&dt=1&ln=1&rt=1-2-3-4-5-6")
-    resp = requests.get(url, timeout=10); resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-    out = []
-    for tbl in soup.find_all("table"):
-        # başlıktan hipodrom & koşu no
-        tit = tbl.find_previous(string=re.compile(r".+?\d+\.Koşu"))
-        m = re.search(r"(.+?)\s+(\d+)\.Koşu", tit or "")
-        hip, kosu = (m.group(1), m.group(2)) if m else (None, None)
+# 3. Galop Verileri
+def parse_galops(soup):
+    records = []
+    tabs = soup.find_all("h3", string=lambda t: "Galop" in t)
+    for tab in tabs:
+        race = tab.get_text(strip=True)
+        tbl = tab.find_next("table")
+        for r in tbl.find_all("tr")[1:]:
+            cols = [td.get_text(strip=True) for td in r.find_all("td")]
+            records.append([race] + cols)
+    return pd.DataFrame(records, columns=["Yarış", "At", "Sprint", "Tarih", "Not"])
 
-        heads = [th.get_text(strip=True) for th in tbl.find_all("th")]
-        cols = [h.lower().replace(" ","_") for h in heads]
-        rows = []
-        for tr in tbl.find_all("tr")[1:]:
-            vals = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
-            if len(vals)==len(cols):
-                rows.append(vals)
-        if not rows: continue
+# 4. Performans Verileri
+def parse_performance(soup):
+    perf = []
+    divs = soup.select("div.post-body p")
+    for p in divs:
+        if "Performans" in p.get_text():
+            parts = p.get_text().split(":")
+            perf.append([parts[0].strip(), parts[1].strip()])
+    return pd.DataFrame(perf, columns=["At/Koşu", "Performans"])
 
-        df = pd.DataFrame(rows, columns=cols)
-        df["hipodrom"], df["kosu_no"] = hip, kosu
-        # normalize önemli alanlar
-        ren = {}
-        for c in df.columns:
-            if "orijin" in c:  ren[c]="orijin"
-            if "sahip" in c:   ren[c]="sahip"
-            if "jokey" in c:   ren[c]="jokey"
-            if "antren" in c:  ren[c]="antrenor"
-            if "idman" in c:   ren[c]="idman"
-            if "derece" in c:  ren[c]="sinif_seviyesi"
-            if "son_3" in c:   ren[c]="son_3_yaris"
-            if "agf" in c:     ren[c]="agf"
-        df.rename(columns=ren, inplace=True)
-        out.append(df)
-    return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+# 5. Geçmiş Sonuçlar
+def parse_results(soup):
+    results = []
+    sections = soup.find_all("h3", string=lambda t: "Sonuç" in t)
+    for sec in sections:
+        race = sec.get_text(strip=True)
+        tbl = sec.find_next("table")
+        for row in tbl.find_all("tr")[1:]:
+            cols = [td.get_text(strip=True) for td in row.find_all("td")]
+            results.append([race] + cols)
+    return pd.DataFrame(results, columns=["Yarış", "Sıra", "At", "Jokey", "Zaman"])
 
-# 2) Sporx
-@safe_fetch
-def fetch_sporx():
-    url = "https://m.sporx.com/at-yarisi"
-    r = requests.get(url, timeout=8); r.raise_for_status()
-    doc = BeautifulSoup(r.text, "html.parser")
-    rows=[]
-    for sec in doc.select("section.race"):
-        track = sec.select_one(".hipodrom").get_text(strip=True)
-        no    = sec.select_one(".race-no").get_text(strip=True).replace("Koşu","")
-        time  = sec.select_one(".time").get_text(strip=True)
-        for li in sec.select("ul.horse-list li"):
-            rows.append({
-                "hipodrom": track,
-                "kosu_no": no,
-                "saat": time,
-                "horse": li.select_one(".name").get_text(strip=True),
-                "agf_sporx": li.select_one(".agf").get_text(strip=True)
-            })
-    return pd.DataFrame(rows)
+# 6. At Sahipleri ve Antrenörler
+def parse_connections(soup):
+    conn = []
+    items = soup.select("ul.connections li")
+    for li in items:
+        text = li.get_text(separator="|", strip=True).split("|")
+        conn.append(text)
+    return pd.DataFrame(conn, columns=["At", "Sahip", "Antrenör"])
 
-# 3) BiTalih
-@safe_fetch
-def fetch_bitalih():
-    url="https://www.bitalih.com/at-yarisi"
-    r=requests.get(url, timeout=8); r.raise_for_status()
-    dom=BeautifulSoup(r.text,"html.parser")
-    rows=[]
-    for tr in dom.select("table.program tr")[1:]:
-        td=tr.find_all("td")
-        rows.append({
-            "hipodrom": td[0].get_text(strip=True),
-            "kosu_no": td[1].get_text(strip=True),
-            "horse": td[2].get_text(strip=True)
-        })
-    return pd.DataFrame(rows)
+# 7. Sprint Bilgileri
+def parse_sprints(soup):
+    sprints = []
+    spans = soup.select("span.sprint-info")
+    for sp in spans:
+        info = sp.get_text(strip=True)
+        race = sp.find_parent("h3").get_text(strip=True)
+        sprints.append([race, info])
+    return pd.DataFrame(sprints, columns=["Yarış", "Sprint"])
 
-# 4) Hipodrom.com
-@safe_fetch
-def fetch_hipo():
-    url="https://www.hipodrom.com"
-    r=requests.get(url, timeout=8); r.raise_for_status()
-    doc=BeautifulSoup(r.text,"html.parser")
-    rows=[]
-    for card in doc.select(".race-card"):
-        trk=card.select_one(".race-track").get_text(strip=True)
-        no =card.select_one(".race-number").get_text(strip=True)
-        tm =card.select_one(".race-time").get_text(strip=True)
-        for li in card.select(".horses li"):
-            rows.append({
-                "hipodrom": trk,
-                "kosu_no": no,
-                "saat": tm,
-                "horse": li.get_text(strip=True)
-            })
-    return pd.DataFrame(rows)
+# 8. Ana Akış
+def main():
+    url = "https://www.sihirlikantarma.org/?m=1"
+    soup = fetch_page(url)
+    
+    df_prog = parse_program(soup)
+    df_galop = parse_galops(soup)
+    df_perf = parse_performance(soup)
+    df_res  = parse_results(soup)
+    df_conn = parse_connections(soup)
+    df_sprint = parse_sprints(soup)
+    
+    # Sonuçları ekrana bas veya CSV’ye yaz
+    print("— Yarış Programı —")
+    print(df_prog)
+    print("\n— Galop Verileri —")
+    print(df_galop)
+    
+    # İsteğe bağlı: CSV
+    df_prog.to_csv("program.csv", index=False)
+    df_galop.to_csv("galop.csv", index=False)
+    df_perf.to_csv("performance.csv", index=False)
+    df_res.to_csv("results.csv", index=False)
+    df_conn.to_csv("connections.csv", index=False)
+    df_sprint.to_csv("sprints.csv", index=False)
 
-# Derleme & Merge
-def compile_all():
-    a = fetch_ag_bulten()
-    s = fetch_sporx()
-    b = fetch_bitalih()
-    h = fetch_hipo()
-
-    if a.empty:
-        return pd.DataFrame()  
-
-    df=a.copy()
-    for src in (s,b,h):
-        df = pd.merge(df, src, on=["hipodrom","kosu_no","horse"], how="left")
-
-    return df
-
-if st.button("Bülteni Derle"):
-    df = compile_all()
-    if df.empty:
-        st.error("Bülten alınamadı.")
-    else:
-        st.dataframe(df, use_container_width=True)
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 CSV İndir", csv, file_name=f"bulten_{date.today()}.csv")
+if __name__ == "__main__":
+    main()
